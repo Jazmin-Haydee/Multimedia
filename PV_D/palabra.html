@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Esquema de Decisión - Inglés</title>
+  <style>
+    :root {
+      --line-color: #34495e;
+      --box-bg: #ffffff;
+      --accent-color: #3498db;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f8f9fa;
+      display: flex;
+      justify-content: center;
+      padding: 40px;
+    }
+
+    /* Estructura del Árbol */
+    .tree ul {
+      padding-top: 20px; 
+      position: relative;
+      transition: all 0.5s;
+      display: flex;
+      justify-content: center;
+    }
+
+    .tree li {
+      float: left; text-align: center;
+      list-style-type: none;
+      position: relative;
+      padding: 20px 5px 0 5px;
+    }
+
+    /* Dibujo de las líneas con conectores CSS */
+    .tree li::before, .tree li::after {
+      content: '';
+      position: absolute; top: 0; right: 50%;
+      border-top: 2px solid var(--line-color);
+      width: 50%; height: 20px;
+    }
+    .tree li::after {
+      right: auto; left: 50%;
+      border-left: 2px solid var(--line-color);
+    }
+
+    /* Quitar conectores de los extremos */
+    .tree li:only-child::after, .tree li:only-child::before { display: none; }
+    .tree li:only-child { padding-top: 0; }
+    .tree li:first-child::before, .tree li:last-child::after { border: 0 none; }
+    .tree li:last-child::before { border-right: 2px solid var(--line-color); border-radius: 0 5px 0 0; }
+    .tree li:first-child::after { border-radius: 5px 0 0 0; }
+
+    /* Línea vertical que baja del padre */
+    .tree ul ul::before {
+      content: '';
+      position: absolute; top: 0; left: 50%;
+      border-left: 2px solid var(--line-color);
+      width: 0; height: 20px;
+    }
+
+    /* Estilo de los Cuadros (Nodos) */
+    .node {
+      border: 2px solid var(--line-color);
+      padding: 10px 20px;
+      text-decoration: none;
+      color: #333;
+      display: inline-block;
+      border-radius: 8px;
+      background: var(--box-bg);
+      font-weight: bold;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    .node.circle { border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; margin: 0 auto; }
+    .node.highlight { border-color: var(--accent-color); background: #ebf5fb; }
+    .instruction { font-size: 12px; color: #666; font-weight: normal; margin-top: 5px; display: block; }
+  </style>
+</head>
+<body>
+
+<div class="tree">
+  <ul>
+    <li>
+      <div class="node circle">PA</div>
+      <ul>
+        <li>
+          <div class="node highlight">PP: ¿Gramática o Speaking?</div>
+          <ul>
+            <li>
+              <div class="node">Gramática</div>
+              <ul>
+                <li><div class="node">Traducción</div></li>
+                <li>
+                    <div class="node">Escritura</div>
+                    <ul>
+                        <li><div class="node highlight">Completar ejemplo<span class="instruction">Input: Texto</span></div></li>
+                    </ul>
+                </li>
+              </ul>
+            </li>
+            <li>
+              <div class="node">Speaking</div>
+              <ul>
+                <li><div class="node">Pronunciación</div></li>
+                <li>
+                    <div class="node">Fluidez</div>
+                    <ul>
+                        <li><div class="node highlight">Hablar al micro<span class="instruction">Input: Voz</span></div></li>
+                    </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+  </ul>
+</div>
+
+</body>
+</html>
