@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Asistente de Inglés Interactivo</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #e8eff1; }
+    h2 { text-align: center; color: #2c3e50; }
+    textarea { width: 100%; height: 80px; padding: 12px; font-size: 16px; border: 2px solid #3498db; border-radius: 8px; box-sizing: border-box; resize: none; }
+    .controls { display: flex; gap: 10px; margin-top: 15px; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    label { font-size: 13px; color: #7f8c8d; font-weight: bold; }
+    select, input[type="range"] { width: 100%; margin-top: 5px; }
+    .buttons { display: flex; gap: 10px; margin-top: 20px; }
+    button { flex: 1; padding: 15px; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; transition: all 0.3s; color: white; font-weight: bold; }
+    #btn-listen { background: #9c27b0; box-shadow: 0 4px #7b1fa2; }
+    #btn-listen:active { box-shadow: 0 0 #7b1fa2; transform: translateY(4px); }
+    #btn-stop   { background: #f44336; }
+    #output-area { margin-top: 15px; padding: 20px; background: #fff; border-radius: 8px; color: #2c3e50; min-height: 60px; border-left: 5px solid #9c27b0; text-align: center; font-size: 1.1em; }
+    .status { font-size: 12px; color: #95a5a6; text-align: center; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+  <h2>Asistente de Práctica:Inglés</h2>
+
+  <textarea id="input-area" placeholder="Diga 'Inglés' para comenzar..."></textarea>
+
+  <div class="controls">
+    <div style="flex:1">
+      <label>🌐 VOZ:</label>
+      <select id="voice-select"></select>
+    </div>
+    <div style="flex:1">
+      <label>🐢 VELOCIDAD: <span id="rate-val">1</span></label>
+      <input type="range" id="rate" min="0.5" max="1.5" step="0.1" value="1">
+    </div>
+  </div>
+
+  <div class="buttons">
+    <button id="btn-listen" onclick="startListening()">🎤 HABLAR</button>
+    <button id="btn-stop" onclick="stopAll()">⏹ DETENER</button>
+  </div>
+
+  <div id="output-area">Esperando comando...</div>
+  <div class="status" id="status-mic">Micrófono apagado</div>
+
+<script>
+    const synth = window.speechSynthesis;
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    
+    const voiceSelect = document.getElementById('voice-select');
+    const outputArea = document.getElementById('output-area');
+    const inputArea = document.getElementById('input-area');
+    const rateInput = document.getElementById('rate');
+    
+    let voices = [];
+    let estadoActual = "inicio";
+    let fraseActual = null;
+
+    // Lista de frases para Gramática (Traducción)
+    const ejerciciosGramatica = [
+      { esp: "Yo tengo una manzana", eng: "i have an apple" },
+      { esp: "El gato está en la casa", eng: "the cat is in the house" },
+      { esp: "Ella es mi amiga", eng: "she is my friend" }
+    ];
+
+    function loadVoices() {
+      voices = synth.getVoices();
+      if (voiceSelect.innerHTML === '') {
+        voices.forEach((voice, i) => {
+          const option = document.createElement('option');
+          option.value = i;
+          option.textContent = `${voice.name} (${voice.lang})`;
+          if(voice.lang.includes('es')) option.selected = true;
+          voiceSelect.appendChild(option);
+        });
+      }
+    }
+
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+      speechSynthesis.onvoiceschanged = loadVoices;
+    }
+    loadVoices();
+
+    function startListening() {
+      synth.cancel(); 
+      recognition.start();
+      outputArea.innerHTML = "🎤 Escuchando...";
+    }
+
+    recognition.onresult = function(event) {
+      const transcript = event.results[0][0].transcript.toLowerCase();
+      inputArea.value = transcript;
+      procesarRespuesta(transcript);
+    };
+
+    function procesarRespuesta(mensaje) {
+      let respuesta = "";
+
+      //Nuestra palabra activadora
+      if (mensaje.includes("inglés") || mensaje.includes("ingles")) {
+        estadoActual = "pp";
+        respuesta = "Hola, ¿qué quieres mejorar: gramática o speaking?";
+      } 
+      
+//Aqui se dividen los eventos
+      else if (estadoActual === "pp") {
+        if (mensaje.includes("gramática") || mensaje.includes("gramatica")) {
+          estadoActual = "rama_gramatica";
+          respuesta = "Bien. ¿Quieres practicar traducción o escritura?";
+        } else if (mensaje.includes("speaking")) {
+          estadoActual = "rama_speaking";
+          respuesta = "Excelente. ¿Prefieres pronunciación o fluidez?";
+        }
+      }
+
+  //Evaluaciones
+      else if (estadoActual === "rama_gramatica") {
+        if (mensaje.includes("traducción") || mensaje.includes("traduccion")) {
+          fraseActual = ejerciciosGramatica[Math.floor(Math.random() * ejerciciosGramatica.length)];
+          estadoActual = "evaluando_traduccion";
+          respuesta = `Traducción: ¿Cómo se dice '${fraseActual.esp}' en inglés?`;
+        }
+      } 
+      else if (estadoActual === "evaluando_traduccion") {
+        if (mensaje.includes(fraseActual.eng)) {
+          respuesta = "¡Perfecto! Lo dijiste muy bien. Ejercicio terminado.";
+        } else {
+          respuesta = `Casi. La respuesta correcta es '${fraseActual.eng}'.`;
+        }
+        estadoActual = "inicio";
+      }
+
+      else if (estadoActual === "rama_speaking") {
+        if (mensaje.includes("pronunciación") || mensaje.includes("pronunciacion")) {
+          estadoActual = "evaluando_pronunciacion";
+          respuesta = "Repite conmigo esta frase de fluidez: 'The sun is bright'.";
+        }
+      }
+      else if (estadoActual === "evaluando_pronunciacion") {
+        if (mensaje.includes("the sun is bright")) {
+          respuesta = "¡Increíble pronunciación! Es correcto.";
+        } else {
+          respuesta = "Te faltó un poco de entonación. Se dice: 'The sun is bright'.";
+        }
+        estadoActual = "inicio";
+      }
+
+      responder(respuesta);
+    }
+
+    function responder(texto) {
+      const utterance = new SpeechSynthesisUtterance(texto);
+      
+      const selectedIndex = voiceSelect.value;
+      if (voices[selectedIndex]) {
+        utterance.voice = voices[selectedIndex];
+      }
+      
+      utterance.rate = parseFloat(rateInput.value);
+      outputArea.innerHTML = "🤖: " + texto;
+      
+      utterance.onend = () => {
+        if (estadoActual !== "inicio") {
+          setTimeout(() => { startListening(); }, 200);
+        } else {
+          outputArea.innerHTML = "✅ Sesión terminada. Di 'Inglés' para volver a empezar.";
+        }
+      };
+
+      synth.speak(utterance);
+    }
+
+    function stopAll() {
+      synth.cancel();
+      recognition.stop();
+      estadoActual = "inicio";
+      outputArea.innerHTML = "⏹ Detenido.";
+    }
+  </script>
+</body>
+</html>
