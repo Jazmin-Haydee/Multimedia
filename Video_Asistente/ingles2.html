@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Asistente de Inglés Interactivo - Documentado</title>
+  <style>
+    /* body: Define el lienzo principal. Usamos Flexbox implícito con márgenes auto para centrar el contenido. */
+    body { font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #e8eff1; }
+    
+    /* h2: Título principal con color contrastado para jerarquía visual. */
+    h2 { text-align: center; color: #2c3e50; }
+    
+    /* textarea: Campo de texto donde se vuelca la transcripción de voz. 'resize: none' evita que el usuario deforme el diseño. */
+    textarea { width: 100%; height: 80px; padding: 12px; border: 2px solid #3498db; border-radius: 8px; resize: none; }
+    
+    /* .controls: Contenedor tipo tarjeta (card) para los selectores de voz y velocidad. */
+    .controls { display: flex; gap: 10px; margin-top: 15px; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    
+    /* .buttons: Contenedor flexible para que los botones de control ocupen el mismo ancho. */
+    .buttons { display: flex; gap: 10px; margin-top: 20px; }
+    
+    /* button: Estilo base. 'cursor: pointer' indica interactividad; 'flex: 1' hace que crezcan equitativamente. */
+    button { flex: 1; padding: 15px; border-radius: 8px; cursor: pointer; color: white; font-weight: bold; border: none; }
+    
+    /* #btn-listen: Color verde para denotar 'inicio' o acción positiva. */
+    #btn-listen { background: #4CAF50; }
+    
+    /* #btn-stop: Color rojo para denotar 'parada' o advertencia. */
+    #btn-stop   { background: #f44336; }
+    
+    /* #output-area: El cuadro de diálogo del bot. El borde izquierdo púrpura ayuda a diferenciar visualmente quién habla. */
+    #output-area { margin-top: 15px; padding: 20px; background: #fff; border-radius: 8px; min-height: 60px; border-left: 5px solid #9c27b0; text-align: center; }
+    
+    /* .status: Texto pequeño para indicar el estado técnico del hardware (micrófono). */
+    .status { font-size: 12px; color: #95a5a6; text-align: center; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+  <h2>Asistente de Inglés: Escucha Activa</h2>
+
+  <textarea id="input-area" placeholder="Di 'Inglés' para activar..."></textarea>
+
+  <div class="controls">
+    <div style="flex:1">
+      <label>🌐 VOZ:</label>
+      <select id="voice-select"></select> </div>
+    <div style="flex:1">
+      <label>🐢 VELOCIDAD:</label>
+      <input type="range" id="rate" min="0.5" max="1.5" step="0.1" value="1">
+    </div>
+  </div>
+
+  <div class="buttons">
+    <button id="btn-listen" onclick="toggleActivation()">🎤 INICIAR ESCUCHA</button>
+    <button id="btn-stop" onclick="stopAll()">⏹ DETENER TODO</button>
+  </div>
+
+  <div id="output-area">Presiona "Iniciar Escucha" para comenzar.</div>
+  <div id="status-mic">Micrófono apagado</div>
+
+<script>
+    /* INICIALIZACIÓN DE APIS DEL NAVEGADOR */
+    // Web Speech API - Synthesis: Permite convertir texto a voz (TTS)
+    const synth = window.speechSynthesis; 
+    
+    // Web Speech API - Recognition: Permite convertir voz a texto (STT). Soporta prefijo webkit para Chrome
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)(); 
+    
+    /*CONFIGURACIÓN  DEL RECONOCIMIENTO
+     */
+    // .continuous: Si es true, el micro no se apaga al detectar una pausa; sigue escuchando hasta que se detenga manualmente
+    recognition.continuous = true; 
+    // .interimResults: Si es false, solo nos entrega el texto final cuando el usuario termina la frase, evitando "basura" procesal
+    recognition.interimResults = false; 
+    // .lang: Idioma base para el diccionario de reconocimiento
+    recognition.lang = 'es-ES'; 
+
+    /*CAPTURA DE ELEMENTOS DEL DOM
+    Guardamos referencias a los elementos HTML para manipularlos sin buscarlos cada vez (optimización).
+     */
+    const voiceSelect = document.getElementById('voice-select');
+    const outputArea = document.getElementById('output-area');
+    const inputArea = document.getElementById('input-area');
+    const rateInput = document.getElementById('rate');
+    const statusMic = document.getElementById('status-mic');
+    
+    /*VARIABLES DE CONTROL DE FLUJO*/
+    let voices = [];           // Array para almacenar objetos de voz del sistema
+    let estadoActual = "inicio"; // Controla la lógica: 'inicio', 'pp' (menú), 'rama_gramatica', etc
+    let fraseActual = null;    // Guarda el objeto {esp, eng} que el usuario debe resolver
+    let activado = false;      // Master switch: si es false, el micrófono no se reiniciará
+    let botHablando = false;   //Evita que el micrófono procese audio mientras el bot emite sonido
+
+    /*GESTIÓN DE VOCES */
+    function loadVoices() {
+      // Obtiene la lista de voces que ofrece el sistema operativo/navegador
+      voices = synth.getVoices();
+      voiceSelect.innerHTML = ''; // Limpia el selector antes de llenar.
+      voices.forEach((voice, i) => {
+        const option = document.createElement('option');
+        option.value = i;
+        option.textContent = `${voice.name} (${voice.lang})`;
+        // Auto-selecciona una voz en español si está disponible para mejorar la experiencia inicial
+        if(voice.lang.includes('es')) option.selected = true; 
+        voiceSelect.appendChild(option);
+      });
+    }
+
+    // El evento 'onvoiceschanged' es porque las voces se cargan de forma asíncrona en algunos navegadores
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+      speechSynthesis.onvoiceschanged = loadVoices;
+    }
+    loadVoices();
+
+    /*LÓGICA DE CONTROL*/
+    function toggleActivation() {
+      if (!activado) {
+        activado = true;
+        recognition.start(); // Activa el flujo de entrada de audio
+        statusMic.innerHTML = "🔴 Micrófono Activo (Esperando 'Inglés')";
+        outputArea.innerHTML = "Di 'Inglés' para comenzar.";
+      }
+    }
+
+    // Si el micro se corta por error de red o tiempo, se reinicia si 'activado' es true
+    recognition.onend = () => {
+      if (activado && !botHablando) recognition.start();
+    };
+
+    /* PROCESAMIENTO DE SEÑALES DE AUDIO */
+    recognition.onresult = function(event) {
+      // Si el semáforo 'botHablando' está activo, ignoramos cualquier entrada para evitar feedback (eco)
+      if (botHablando) return; 
+
+      // Accedemos al último resultado de la lista de transcripciones capturada
+      const transcript = event.results[event.results.length - 1][0].transcript.toLowerCase().trim();
+      
+      // Frases de menos de 2 caracteres se descartan por ser usualmente ruidos de fondo
+      if (transcript.length < 2) return; 
+
+      inputArea.value = transcript;
+      
+      // Si el usuario dice "Inglés", reiniciamos el flujo sin importar el estado actual
+      if (transcript.includes("inglés") || transcript.includes("ingles")) {
+        estadoActual = "pp"; // Reset a menú principal
+        responder("Hola, ¿qué quieres mejorar: gramática o speaking?");
+        return;
+      } 
+
+      // Si no es la palabra activadora, pasamos la frase a la lógica de decisión según el estado.
+      if (estadoActual !== "inicio") {
+        procesarRespuesta(transcript);
+      }
+    };
+
+    /*MÁQUINA DE ESTADO se decide qué responder basándose en lo que el usuario dijo y en qué paso está   */
+    function procesarRespuesta(mensaje) {
+      let respuesta = "";
+
+      // Menú Principal
+      if (estadoActual === "pp") {
+        if (mensaje.includes("gramática") || mensaje.includes("gramatica")) {
+          estadoActual = "rama_gramatica";
+          respuesta = "Bien. ¿Quieres practicar traducción o escritura?";
+        } else if (mensaje.includes("speaking")) {
+          estadoActual = "rama_speaking";
+          respuesta = "Excelente. ¿Prefieres pronunciación o fluidez?";
+        }
+      }
+      
+      //Rama Gramática - Selección de modo
+      else if (estadoActual === "rama_gramatica") {
+        if (mensaje.includes("traducción") || mensaje.includes("traduccion")) {
+          // Seleccionamos un ejercicio aleatorio del array
+          fraseActual = ejerciciosGramatica[Math.floor(Math.random() * ejerciciosGramatica.length)];
+          estadoActual = "evaluando_traduccion";
+          respuesta = `Traducción: ¿Cómo se dice '${fraseActual.esp}' en inglés?`;
+          // Cambio de idioma preparando el micro para entender inglés
+          recognition.lang = 'en-US'; 
+        }
+      } 
+      
+      // Evaluación de resultados
+      else if (estadoActual === "evaluando_traduccion") {
+        // Comparamos lo que el usuario dijo con la respuesta correcta guardada
+        if (mensaje.includes(fraseActual.eng)) {
+          respuesta = "¡Perfecto! Lo dijiste muy bien. Di inglés para otra vez.";
+        } else {
+          respuesta = `Casi. La respuesta correcta era '${fraseActual.eng}'. Di inglés para reiniciar.`;
+        }
+        estadoActual = "inicio"; // Regresamos al estado de espera pasiva
+        recognition.lang = 'es-ES'; // Restauramos el micro a español
+      }
+
+      if (respuesta) responder(respuesta);
+    }
+
+    /* SALIDA DE AUDIO */
+    function responder(texto) {
+      botHablando = true; // Encendemos el semáforo para ignorar el micrófono
+      recognition.stop();  // Forzamos la detención del reconocimiento para liberar recursos de audio
+      
+      const utterance = new SpeechSynthesisUtterance(texto); // Creamos el objeto de mensaje
+      const selectedIndex = voiceSelect.value;
+      
+      // Configuramos voz y velocidad según los inputs del usuario
+      if (voices[selectedIndex]) utterance.voice = voices[selectedIndex];
+      utterance.rate = parseFloat(rateInput.value);
+      
+      outputArea.innerHTML = "🤖: " + texto;
+      
+      // Se dispara cuando el bot termina de emitir sonido
+      utterance.onend = () => {
+        setTimeout(() => {
+          botHablando = false; // Apagamos 
+          if (activado) {
+            recognition.start(); // Re-activa el micrófono para escuchar al usuario
+            statusMic.innerHTML = "🔴 Escuchando...";
+          }
+        }, 500); // Añadimos un pequeño delay de 500ms para asegurar que el hardware de audio ha quedado en silencio total.
+      };
+
+      synth.speak(utterance); // Ejecuta la síntesis de voz
+    }
+
+    /* CIERRE DEL SISTEMA */
+    function stopAll() {
+      activado = false; // Evita reinicios automáticos 
+      synth.cancel();   // Silencia al bot inmediatamente
+      recognition.stop(); // Apaga el micrófono
+      estadoActual = "inicio";
+      outputArea.innerHTML = "⏹ Detenido.";
+      statusMic.innerHTML = "Micrófono apagado";
+    }
+  </script>
+</body>
+</html>
